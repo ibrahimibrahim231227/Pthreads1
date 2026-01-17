@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ibrahim_ibrahim Pthreads</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f8f8f8;
+        }
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 32px 40px;
+            border-radius: 8px;
+        }
+        h1, h2, h3 {
+            color: #003366;
+        }
+        .code-diff pre { background: #f9f9f9; padding: 12px; border-radius:6px; overflow-x:auto; }
+        .code-diff .added { background: #e6ffed; display:block; }
+        .code-diff .removed { background: #ffecec; display:block; }
+        pre {
+            background: #f4f4f4;
+            border-left: 4px solid #003366;
+            padding: 12px;
+            overflow-x: auto;
+        }
+        a {
+            color: #003366;
+        }
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            color: #888;
+            font-size: 0.95em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ibrahim_ibrahim Pthreads</h1>
+        <h2>Overview</h2>
+        <p>This page demonstrates optimizing matrix multiplication using pthreads in C++. It explores parallelization techniques to improve performance for large matrices.</p>
+        <h2>Source Code</h2>
+        <pre><code>// matrix.cpp
+#include &lt;iostream&gt;
+#include &lt;fstream&gt;
+
+constexpr int DIM = 1000;
+long matrix_a[DIM][DIM];
+long matrix_b[DIM][DIM];
+long matrix_c[DIM][DIM];
+
+// Initialize matrices with sample values
+void init() {
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            matrix_a[i][j] = i + j;
+            matrix_b[i][j] = i - j;
+            matrix_c[i][j] = 0;
+        }
+    }
+}
+
+// Perform matrix multiplication
+void multiply() {
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            long sum = 0;
+            for (int k = 0; k &lt; DIM; ++k) {
+                sum += matrix_a[i][k] * matrix_b[k][j];
+            }
+            matrix_c[i][j] = sum;
+        }
+    }
+}
+
+// Write result to a file
+void print() {
+    std::ofstream fout("serial.txt");
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            fout &lt;&lt; matrix_c[i][j] &lt;&lt; '\\n';
+        }
+    }
+    fout.close();
+}
+
+int main() {
+    init();
+    multiply();
+    print();
+    return 0;
+}
+</code></pre>
+
+        <h2>Execution Time</h2>
+        <img src="matrix_time.svg" alt="Execution time results" style="max-width:100%;border:1px solid #ccc;background:#fff;">
+        <h2>How it Works</h2>
+        <ul>
+            <li>Initializes two matrices <code>matrix_a</code> and <code>matrix_b</code> with simple values.</li>
+            <li>Performs matrix multiplication and stores the result in <code>matrix_c</code>.</li>
+            <li>Writes the result to a file <code>serial.txt</code>.</li>
+        </ul>
+        <h2>Step 1: Profiling and Bottleneck Analysis</h2>
+        <p>In this step, we update the code to measure the execution time of each major phase: initialization, multiplication, and printing. We also estimate the number of basic operations performed in each phase and calculate the time per operation. This helps us identify which part of the program is the bottleneck and should be parallelized for maximum speedup. The results show that multiplication is the most time-consuming phase, making it the best candidate for parallelization using pthreads.</p>
+        <h3>Code</h3>
+<pre><code>#include &lt;iostream&gt;
+#include &lt;fstream&gt;
+#include &lt;chrono&gt;
+#include &lt;cstdint&gt;
+
+constexpr int DIM = 1000;
+long matrix_a[DIM][DIM];
+long matrix_b[DIM][DIM];
+long matrix_c[DIM][DIM];
+
+// Initialize matrices with sample values
+void init() {
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            matrix_a[i][j] = i + j;
+            matrix_b[i][j] = i - j;
+            matrix_c[i][j] = 0;
+        }
+    }
+}
+
+// Perform matrix multiplication
+void multiply() {
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            long sum = 0;
+            for (int k = 0; k &lt; DIM; ++k) {
+                sum += matrix_a[i][k] * matrix_b[k][j];
+            }
+            matrix_c[i][j] = sum;
+        }
+    }
+}
+
+// Write result to a file
+void print() {
+    std::ofstream fout("serial.txt");
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            fout &lt;&lt; matrix_c[i][j] &lt;&lt; '\n';
+        }
+    }
+    fout.close();
+}
+
+int main() {
+    using clock = std::chrono::high_resolution_clock;
+
+    auto t0 = clock::now();
+    init();
+    auto t1 = clock::now();
+    multiply();
+    auto t2 = clock::now();
+    print();
+    auto t3 = clock::now();
+
+    std::chrono::duration&lt;double&gt; init_sec = t1 - t0;
+    std::chrono::duration&lt;double&gt; mult_sec = t2 - t1;
+    std::chrono::duration&lt;double&gt; print_sec = t3 - t2;
+    std::chrono::duration&lt;double&gt; total_sec = t3 - t0;
+
+    // Count approximate basic operations
+    // init: two arithmetic ops per element (i+j, i-j) plus one store for matrix_c
+    std::uint64_t init_ops = static_cast&lt;std::uint64_t&gt;(DIM) * DIM * 3; // (i+j),(i-j),c=0
+
+    // multiply: one multiply and one add per k for each (i,j)
+    std::uint64_t mul_ops = static_cast&lt;std::uint64_t&gt;(DIM) * DIM * DIM; // multiplications
+    std::uint64_t add_ops = mul_ops; // additions
+    std::uint64_t mult_total_ops = mul_ops + add_ops;
+
+    // print: one write per element
+    std::uint64_t print_ops = static_cast&lt;std::uint64_t&gt;(DIM) * DIM;
+
+    double sec_per_init_op = init_sec.count() / double(init_ops);
+    double sec_per_mult_op = mult_sec.count() / double(mult_total_ops);
+    double sec_per_print_op = print_sec.count() / double(print_ops);
+
+    // Print profiling summary
+    std::cout &lt;&lt; "Profiling summary:\n";
+    std::cout &lt;&lt; "  init:  " &lt;&lt; init_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "  mult:  " &lt;&lt; mult_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "  print: " &lt;&lt; print_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "  total: " &lt;&lt; total_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "Estimated basic ops:\n";
+    std::cout &lt;&lt; "  init ops:  " &lt;&lt; init_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "  mult muls: " &lt;&lt; mul_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "  mult adds: " &lt;&lt; add_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "  print ops: " &lt;&lt; print_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "Time per init-op:  " &lt;&lt; sec_per_init_op &lt;&lt; " s\n";
+    std::cout &lt;&lt; "Time per mult-op:  " &lt;&lt; sec_per_mult_op &lt;&lt; " s\n";
+    std::cout &lt;&lt; "Time per print-op: " &lt;&lt; sec_per_print_op &lt;&lt; " s\n";
+
+    // Decide which part is the bottleneck by total time
+    if (mult_sec.count() &gt;= init_sec.count() &amp;&amp; mult_sec.count() &gt;= print_sec.count()) {
+        std::cout &lt;&lt; "Bottleneck: multiplication\n";
+    } else if (init_sec.count() &gt;= mult_sec.count() &amp;&amp; init_sec.count() &gt;= print_sec.count()) {
+        std::cout &lt;&lt; "Bottleneck: initialization\n";
+    } else {
+        std::cout &lt;&lt; "Bottleneck: printing/output\n";
+    }
+
+    // Also write a small results file for HTML embedding
+    std::ofstream rf("profile_results.txt");
+    rf &lt;&lt; "init " &lt;&lt; init_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "mult " &lt;&lt; mult_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "print " &lt;&lt; print_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "total " &lt;&lt; total_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "init_ops " &lt;&lt; init_ops &lt;&lt; "\n";
+    rf &lt;&lt; "mul_ops " &lt;&lt; mul_ops &lt;&lt; "\n";
+    rf &lt;&lt; "add_ops " &lt;&lt; add_ops &lt;&lt; "\n";
+    rf &lt;&lt; "print_ops " &lt;&lt; print_ops &lt;&lt; "\n";
+    rf &lt;&lt; "sec_per_init_op " &lt;&lt; sec_per_init_op &lt;&lt; "\n";
+    rf &lt;&lt; "sec_per_mult_op " &lt;&lt; sec_per_mult_op &lt;&lt; "\n";
+    rf &lt;&lt; "sec_per_print_op " &lt;&lt; sec_per_print_op &lt;&lt; "\n";
+    rf.close();
+
+    return 0;
+}
+</code></pre>
+    <h3>Results</h3>
+    <p>The chart below shows measured wall-clock time for each phase from a run on this machine.</p>
+    <img src="matrix_time_step2.svg" alt="Step 1 execution time results" style="max-width:100%;border:1px solid #ccc;background:#fff;">
+
+    <h3>Results explanation</h3>
+    <p>From the run we collected the following timings:</p>
+    <ul>
+        <li><strong>init</strong>: 0.0076265 s</li>
+        <li><strong>mult</strong>: 2.13325 s</li>
+        <li><strong>print</strong>: 0.0613734 s</li>
+        <li><strong>total</strong>: 2.20225 s</li>
+    </ul>
+    <p>Interpretation: the <strong>multiplication</strong> phase dominates total runtime by far and is therefore the best candidate for pthreads parallelization. Although printing has higher time-per-operation, its total work is small compared to multiplication.</p>
+
+        <h2>Step 2: Run multiplication in a separate thread</h2>
+        <p>We modified <code>matrix.cpp</code> so the <code>multiply()</code> function runs in a worker pthread created by the main thread. The main thread waits (joins) the worker before continuing to the printing phase. Compile using the <code>-pthread</code> flag, for example:</p>
+        <pre><code>g++ -O2 -pthread -std=c++17 matrix.cpp -o matrix</code></pre>
+        <p>Important: this change runs the multiplication on a different thread but still uses only a single worker thread. To fully utilize multiple cores, the next step is to split the matrix work (rows or blocks) across multiple pthreads and measure speedup across thread counts.</p>
+
+        <h2>Step 3: Split work across multiple pthreads and benchmark</h2>
+        <p>In this step we divide the matrix rows among multiple worker pthreads so the multiplication runs in parallel across CPU cores. The program accepts an optional thread-count argument (first command-line argument). Run the program with different thread counts to collect <code>mult</code> timings written to <code>profile_results.txt</code> (for example: <code>./matrix 1</code>, <code>./matrix 2</code>, <code>./matrix 4</code>, <code>./matrix 8</code>) and compare total runtime and per-thread speedup.</p>
+        <p>Note: ensure your system has enough cores — consider CPU affinity/pinning for consistent results. After collecting data, add charts comparing thread counts to this page.</p>
+
+        <h3>Code</h3>
+<pre><code>#include &lt;iostream&gt;
+#include &lt;fstream&gt;
+#include &lt;chrono&gt;
+#include &lt;cstdint&gt;
+#include &lt;pthread.h&gt;
+#include &lt;cstdlib&gt;
+
+constexpr int DIM = 1000;
+long matrix_a[DIM][DIM];
+long matrix_b[DIM][DIM];
+long matrix_c[DIM][DIM];
+
+// Initialize matrices with sample values
+void init() {
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            matrix_a[i][j] = i + j;
+            matrix_b[i][j] = i - j;
+            matrix_c[i][j] = 0;
+        }
+    }
+}
+
+// Perform matrix multiplication
+void multiply() {
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            long sum = 0;
+            for (int k = 0; k &lt; DIM; ++k) {
+                sum += matrix_a[i][k] * matrix_b[k][j];
+            }
+            matrix_c[i][j] = sum;
+        }
+    }
+}
+
+// pthread wrapper for running multiply() in a separate thread
+void* multiply_thread_fn(void* /*arg*/) {
+    multiply();
+    return nullptr;
+}
+
+// Arguments for per-thread multiply range
+struct ThreadArgs {
+    int row_start;
+    int row_end; // exclusive
+};
+
+// Worker: multiply rows [row_start, row_end)
+void* multiply_range(void* arg) {
+    ThreadArgs* a = static_cast&lt;ThreadArgs*&gt;(arg);
+    for (int i = a-&gt;row_start; i &lt; a-&gt;row_end; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            long sum = 0;
+            for (int k = 0; k &lt; DIM; ++k) {
+                sum += matrix_a[i][k] * matrix_b[k][j];
+            }
+            matrix_c[i][j] = sum;
+        }
+    }
+    return nullptr;
+}
+
+// Write result to a file
+void print() {
+    std::ofstream fout("serial.txt");
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            fout &lt;&lt; matrix_c[i][j] &lt;&lt; '\n';
+        }
+    }
+    fout.close();
+}
+
+int main(int argc, char** argv) {
+    using clock = std::chrono::high_resolution_clock;
+
+    auto t0 = clock::now();
+    init();
+    auto t1 = clock::now();
+
+    // Determine number of worker threads (optional argv[1])
+    int nthreads = 4;
+    if (argc &gt; 1) {
+        int parsed = std::atoi(argv[1]);
+        if (parsed &gt; 0) nthreads = parsed;
+    }
+    if (nthreads &gt; DIM) nthreads = DIM;
+
+    pthread_t* threads = new pthread_t[nthreads];
+    ThreadArgs* targs = new ThreadArgs[nthreads];
+
+    int base = DIM / nthreads;
+    int rem = DIM % nthreads;
+    int start = 0;
+    for (int t = 0; t &lt; nthreads; ++t) {
+        int rows = base + (t &lt; rem ? 1 : 0);
+        int end = start + rows;
+        targs[t].row_start = start;
+        targs[t].row_end = end;
+        if (pthread_create(&threads[t], nullptr, &multiply_range, &targs[t]) != 0) {
+            std::cerr &lt;&lt; "Failed to create multiply thread " &lt;&lt; t &lt;&lt; "\n";
+            delete[] threads;
+            delete[] targs;
+            return 1;
+        }
+        start = end;
+    }
+
+    for (int t = 0; t &lt; nthreads; ++t) {
+        if (pthread_join(threads[t], nullptr) != 0) {
+            std::cerr &lt;&lt; "Failed to join multiply thread " &lt;&lt; t &lt;&lt; "\n";
+            delete[] threads;
+            delete[] targs;
+            return 1;
+        }
+    }
+
+    auto t2 = clock::now();
+    delete[] threads;
+    delete[] targs;
+    print();
+    auto t3 = clock::now();
+
+    std::chrono::duration&lt;double&gt; init_sec = t1 - t0;
+    std::chrono::duration&lt;double&gt; mult_sec = t2 - t1;
+    std::chrono::duration&lt;double&gt; print_sec = t3 - t2;
+    std::chrono::duration&lt;double&gt; total_sec = t3 - t0;
+
+    // Count approximate basic operations
+    // init: two arithmetic ops per element (i+j, i-j) plus one store for matrix_c
+    std::uint64_t init_ops = static_cast&lt;std::uint64_t&gt;(DIM) * DIM * 3; // (i+j),(i-j),c=0
+
+    // multiply: one multiply and one add per k for each (i,j)
+    std::uint64_t mul_ops = static_cast&lt;std::uint64_t&gt;(DIM) * DIM * DIM; // multiplications
+    std::uint64_t add_ops = mul_ops; // additions
+    std::uint64_t mult_total_ops = mul_ops + add_ops;
+
+    // print: one write per element
+    std::uint64_t print_ops = static_cast&lt;std::uint64_t&gt;(DIM) * DIM;
+
+    double sec_per_init_op = init_sec.count() / double(init_ops);
+    double sec_per_mult_op = mult_sec.count() / double(mult_total_ops);
+    double sec_per_print_op = print_sec.count() / double(print_ops);
+
+    // Print profiling summary
+    std::cout &lt;&lt; "Profiling summary:\n";
+    std::cout &lt;&lt; "  init:  " &lt;&lt; init_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "  mult:  " &lt;&lt; mult_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "  print: " &lt;&lt; print_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "  total: " &lt;&lt; total_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "Estimated basic ops:\n";
+    std::cout &lt;&lt; "  init ops:  " &lt;&lt; init_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "  mult muls: " &lt;&lt; mul_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "  mult adds: " &lt;&lt; add_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "  print ops: " &lt;&lt; print_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "Time per init-op:  " &lt;&lt; sec_per_init_op &lt;&lt; " s\n";
+    std::cout &lt;&lt; "Time per mult-op:  " &lt;&lt; sec_per_mult_op &lt;&lt; " s\n";
+    std::cout &lt;&lt; "Time per print-op: " &lt;&lt; sec_per_print_op &lt;&lt; " s\n";
+
+    // Decide which part is the bottleneck by total time
+    if (mult_sec.count() &gt;= init_sec.count() &amp;&amp; mult_sec.count() &gt;= print_sec.count()) {
+        std::cout &lt;&lt; "Bottleneck: multiplication\n";
+    } else if (init_sec.count() &gt;= mult_sec.count() &amp;&amp; init_sec.count() &gt;= print_sec.count()) {
+        std::cout &lt;&lt; "Bottleneck: initialization\n";
+    } else {
+        std::cout &lt;&lt; "Bottleneck: printing/output\n";
+    }
+
+    // Also write a small results file for HTML embedding
+    std::ofstream rf("profile_results.txt");
+    rf &lt;&lt; "init " &lt;&lt; init_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "mult " &lt;&lt; mult_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "print " &lt;&lt; print_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "total " &lt;&lt; total_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "init_ops " &lt;&lt; init_ops &lt;&lt; "\n";
+    rf &lt;&lt; "mul_ops " &lt;&lt; mul_ops &lt;&lt; "\n";
+    rf &lt;&lt; "add_ops " &lt;&lt; add_ops &lt;&lt; "\n";
+    rf &lt;&lt; "print_ops " &lt;&lt; print_ops &lt;&lt; "\n";
+    rf &lt;&lt; "sec_per_init_op " &lt;&lt; sec_per_init_op &lt;&lt; "\n";
+    rf &lt;&lt; "sec_per_mult_op " &lt;&lt; sec_per_mult_op &lt;&lt; "\n";
+    rf &lt;&lt; "sec_per_print_op " &lt;&lt; sec_per_print_op &lt;&lt; "\n";
+    rf.close();
+
+    return 0;
+}
+</code></pre>
+
+        <h3>Difference from Step 1 (serial/instrumented)</h3>
+        <ul>
+            <li><strong>Threading:</strong> Step 1 runs the whole multiplication in the main thread and instruments times. Step 3 splits the multiplication across multiple pthreads using <code>multiply_range</code>, creating <code>nthreads</code> workers and joining them.</li>
+            <li><strong>Work division:</strong> Step 3 divides rows among threads (evenly with remainder handled), so each thread computes a disjoint set of output rows — no locks are required because each element is written by exactly one thread.</li>
+            <li><strong>Runtime control:</strong> Step 3 accepts an optional thread-count argument (<code>./matrix &lt;threads&gt;</code>), allowing benchmarking of different parallel configurations; Step 1 used a single-thread measurement.</li>
+            <li><strong>Timing:</strong> Both steps keep the same timing points (init, mult, print). In Step 3 the <code>mult</code> timing measures the wall-clock time to run all worker threads (from creation to join), so speedup can be observed by running with different thread counts.</li>
+            <li><strong>Compilation:</strong> Build Step 3 with <code>-pthread</code> (for example: <code>g++ -O2 -pthread -std=c++17 matrix.cpp -o matrix</code>).</li>
+        </ul>
+
+        <h3>Results</h3>
+        
+        <img src="matrix_time_step4.svg" alt="execution time results" style="max-width:100%;border:1px solid #ccc;background:#fff;">
+
+        <h3>Results comparison (Step 1 vs Step 3)</h3>
+        <p>Summary:</p>
+        <ul>
+            <li>Step 1 (single-threaded mult): <strong>mult</strong> = 2.13325 s, <strong>total</strong> = 2.20225 s.</li>
+            <li>Step 3 (multi-threaded, nthreads=4 by default): <strong>mult</strong> = 0.783748 s, <strong>total</strong> = 0.84087 s.</li>
+        </ul>
+        <p>Interpretation: moving the multiplication to 4 worker pthreads reduced the multiplication time by about 2.7× (2.13325 / 0.783748 ≈ 2.72) and reduced total runtime by about 2.6×. Initialization and printing times stayed small and roughly the same; the observed speedup is therefore dominated by parallelizing the multiplication phase. Results may vary across runs and machines — repeat measurements and try different thread counts for a fuller benchmark.</p>
+
+        <h2>Step 4: Synchronize worker threads on the common start</h2>
+        <p>In this step we add an explicit synchronization point so all worker threads start the multiplication at the same moment. Concretely, we initialized a <code>pthread_barrier_t</code> in <code>main()</code> (participants = workers + main), had each worker call <code>pthread_barrier_wait()</code> before processing its assigned rows, and then the main thread also waits on the barrier and records the <code>mult</code> start time right after the barrier release. After workers finish we destroy the barrier.</p>
+        <p>Why this helps: it removes timing noise from staggered thread startups and excludes thread-creation latency from the measured multiplication interval, so the reported <code>mult</code> time better reflects pure compute work. Use this step when you want repeatable, comparable measurements across thread counts or when studying fine-grained scaling.</p>
+
+        <h3>Code</h3>
+<pre><code>#include &lt;iostream&gt;
+#include &lt;fstream&gt;
+#include &lt;chrono&gt;
+#include &lt;cstdint&gt;
+#include &lt;pthread.h&gt;
+#include &lt;cstdlib&gt;
+
+constexpr int DIM = 1000;
+long matrix_a[DIM][DIM];
+long matrix_b[DIM][DIM];
+long matrix_c[DIM][DIM];
+// Barrier to synchronize thread start of multiplication
+pthread_barrier_t start_barrier;
+
+// Initialize matrices with sample values
+void init() {
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            matrix_a[i][j] = i + j;
+            matrix_b[i][j] = i - j;
+            matrix_c[i][j] = 0;
+        }
+    }
+}
+
+// Perform matrix multiplication
+void multiply() {
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            long sum = 0;
+            for (int k = 0; k &lt; DIM; ++k) {
+                sum += matrix_a[i][k] * matrix_b[k][j];
+            }
+            matrix_c[i][j] = sum;
+        }
+    }
+}
+
+// pthread wrapper for running multiply() in a separate thread
+void* multiply_thread_fn(void* /*arg*/) {
+    multiply();
+    return nullptr;
+}
+
+// Arguments for per-thread multiply range
+struct ThreadArgs {
+    int row_start;
+    int row_end; // exclusive
+};
+
+// Worker: multiply rows [row_start, row_end)
+void* multiply_range(void* arg) {
+    ThreadArgs* a = static_cast&lt;ThreadArgs*&gt;(arg);
+    // wait until main signals all threads to start together
+    pthread_barrier_wait(&start_barrier);
+    for (int i = a-&gt;row_start; i &lt; a-&gt;row_end; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            long sum = 0;
+            for (int k = 0; k &lt; DIM; ++k) {
+                sum += matrix_a[i][k] * matrix_b[k][j];
+            }
+            matrix_c[i][j] = sum;
+        }
+    }
+    return nullptr;
+}
+
+// Write result to a file
+void print() {
+    std::ofstream fout("serial.txt");
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            fout &lt;&lt; matrix_c[i][j] &lt;&lt; '\n';
+        }
+    }
+    fout.close();
+}
+
+int main(int argc, char** argv) {
+    using clock = std::chrono::high_resolution_clock;
+
+    auto t0 = clock::now();
+    init();
+    auto t1 = clock::now();
+
+    // Determine number of worker threads (optional argv[1])
+    int nthreads = 4;
+    if (argc &gt; 1) {
+        int parsed = std::atoi(argv[1]);
+        if (parsed &gt; 0) nthreads = parsed;
+    }
+    if (nthreads &gt; DIM) nthreads = DIM;
+
+    // initialize barrier: workers + main
+    if (pthread_barrier_init(&start_barrier, nullptr, nthreads + 1) != 0) {
+        std::cerr &lt;&lt; "Failed to init barrier\n";
+        return 1;
+    }
+
+    pthread_t* threads = new pthread_t[nthreads];
+    ThreadArgs* targs = new ThreadArgs[nthreads];
+
+    int base = DIM / nthreads;
+    int rem = DIM % nthreads;
+    int start = 0;
+    for (int t = 0; t &lt; nthreads; ++t) {
+        int rows = base + (t &lt; rem ? 1 : 0);
+        int end = start + rows;
+        targs[t].row_start = start;
+        targs[t].row_end = end;
+        if (pthread_create(&threads[t], nullptr, &multiply_range, &targs[t]) != 0) {
+            std::cerr &lt;&lt; "Failed to create multiply thread " &lt;&lt; t &lt;&lt; "\n";
+            delete[] threads;
+            delete[] targs;
+            return 1;
+        }
+        start = end;
+    }
+
+    // all threads created; release them to start multiplication at the same time
+    // main participates in the barrier so the timing starts when barrier returns
+    if (pthread_barrier_wait(&start_barrier) != 0 &amp;&amp; errno != 0) {
+        // pthread_barrier_wait returns PTHREAD_BARRIER_SERIAL_THREAD for one thread
+    }
+    auto t_start_mult = clock::now();
+
+    for (int t = 0; t &lt; nthreads; ++t) {
+        if (pthread_join(threads[t], nullptr) != 0) {
+            std::cerr &lt;&lt; "Failed to join multiply thread " &lt;&lt; t &lt;&lt; "\n";
+            delete[] threads;
+            delete[] targs;
+            return 1;
+        }
+    }
+    auto t2 = clock::now();
+    // destroy barrier now that threads have finished
+    pthread_barrier_destroy(&start_barrier);
+    delete[] threads;
+    delete[] targs;
+    print();
+    auto t3 = clock::now();
+
+    std::chrono::duration&lt;double&gt; init_sec = t1 - t0;
+    std::chrono::duration&lt;double&gt; mult_sec = t2 - t_start_mult;
+    std::chrono::duration&lt;double&gt; print_sec = t3 - t2;
+    std::chrono::duration&lt;double&gt; total_sec = t3 - t0;
+
+    // Count approximate basic operations
+    // init: two arithmetic ops per element (i+j, i-j) plus one store for matrix_c
+    std::uint64_t init_ops = static_cast&lt;std::uint64_t&gt;(DIM) * DIM * 3; // (i+j),(i-j),c=0
+
+    // multiply: one multiply and one add per k for each (i,j)
+    std::uint64_t mul_ops = static_cast&lt;std::uint64_t&gt;(DIM) * DIM * DIM; // multiplications
+    std::uint64_t add_ops = mul_ops; // additions
+    std::uint64_t mult_total_ops = mul_ops + add_ops;
+
+    // print: one write per element
+    std::uint64_t print_ops = static_cast&lt;std::uint64_t&gt;(DIM) * DIM;
+
+    double sec_per_init_op = init_sec.count() / double(init_ops);
+    double sec_per_mult_op = mult_sec.count() / double(mult_total_ops);
+    double sec_per_print_op = print_sec.count() / double(print_ops);
+
+    // Print profiling summary
+    std::cout &lt;&lt; "Profiling summary:\n";
+    std::cout &lt;&lt; "  init:  " &lt;&lt; init_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "  mult:  " &lt;&lt; mult_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "  print: " &lt;&lt; print_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "  total: " &lt;&lt; total_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "Estimated basic ops:\n";
+    std::cout &lt;&lt; "  init ops:  " &lt;&lt; init_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "  mult muls: " &lt;&lt; mul_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "  mult adds: " &lt;&lt; add_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "  print ops: " &lt;&lt; print_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "Time per init-op:  " &lt;&lt; sec_per_init_op &lt;&lt; " s\n";
+    std::cout &lt;&lt; "Time per mult-op:  " &lt;&lt; sec_per_mult_op &lt;&lt; " s\n";
+    std::cout &lt;&lt; "Time per print-op: " &lt;&lt; sec_per_print_op &lt;&lt; " s\n";
+
+    // Decide which part is the bottleneck by total time
+    if (mult_sec.count() &gt;= init_sec.count() &amp;&amp; mult_sec.count() &gt;= print_sec.count()) {
+        std::cout &lt;&lt; "Bottleneck: multiplication\n";
+    } else if (init_sec.count() &gt;= mult_sec.count() &amp;&amp; init_sec.count() &gt;= print_sec.count()) {
+        std::cout &lt;&lt; "Bottleneck: initialization\n";
+    } else {
+        std::cout &lt;&lt; "Bottleneck: printing/output\n";
+    }
+
+    // Also write a small results file for HTML embedding
+    std::ofstream rf("profile_results.txt");
+    rf &lt;&lt; "init " &lt;&lt; init_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "mult " &lt;&lt; mult_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "print " &lt;&lt; print_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "total " &lt;&lt; total_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "init_ops " &lt;&lt; init_ops &lt;&lt; "\n";
+    rf &lt;&lt; "mul_ops " &lt;&lt; mul_ops &lt;&lt; "\n";
+    rf &lt;&lt; "add_ops " &lt;&lt; add_ops &lt;&lt; "\n";
+    rf &lt;&lt; "print_ops " &lt;&lt; print_ops &lt;&lt; "\n";
+    rf &lt;&lt; "sec_per_init_op " &lt;&lt; sec_per_init_op &lt;&lt; "\n";
+    rf &lt;&lt; "sec_per_mult_op " &lt;&lt; sec_per_mult_op &lt;&lt; "\n";
+    rf &lt;&lt; "sec_per_print_op " &lt;&lt; sec_per_print_op &lt;&lt; "\n";
+    rf.close();
+
+    return 0;
+}
+</code></pre>
+
+        <h3>Results</h3>
+        <p>Below is the synchronized-start measurement for each phase;
+        <img src="matrix_time_step5.svg" alt="Final execution time results" style="max-width:100%;border:1px solid #ccc;background:#fff;">
+    
+        <p>Interpretation: the barrier-synchronized timing reduces startup noise so <strong>mult</strong> reflects the compute-only phase more accurately. Use repeated trials and medians per thread-count to evaluate real speedup and variability.</p>
+
+        <h2>Step 5: Reduce memory contention with a transposed copy of B</h2>
+        <p>In this step we change the memory layout to improve cache locality and reduce memory-bandwidth contention between threads. Concretely:</p>
+        <ul>
+            <li>Create an aligned transposed copy `matrix_b_t` in <strong>matrix.cpp</strong> (e.g. <code>alignas(64) long matrix_b_t[DIM][DIM];</code>).</li>
+            <li>Fill `matrix_b_t` during <code>init()</code> by transposing `matrix_b` so each row of <code>matrix_b_t</code> corresponds to a column of the original <code>matrix_b</code>.</li>
+            <li>Use rows of <code>matrix_a</code> and rows of <code>matrix_b_t</code> inside the inner loop so both source arrays are accessed contiguously (better cache behavior).</li>
+        </ul>
+        <h3>Why this helps</h3>
+        <p>Reading contiguous memory in the inner loop reduces cache misses and lowers pressure on the memory subsystem; together with per-thread row partitioning this minimizes cross-thread contention and often yields a noticeable reduction in the <strong>mult</strong> time.</p>
+
+        <h3>Code</h3>
+        <pre><code>#include &lt;iostream&gt;
+#include &lt;fstream&gt;
+#include &lt;chrono&gt;
+#include &lt;cstdint&gt;
+#include &lt;pthread.h&gt;
+#include &lt;cstdlib&gt;
+
+constexpr int DIM = 1000;
+alignas(64) long matrix_a[DIM][DIM];
+alignas(64) long matrix_b[DIM][DIM];
+alignas(64) long matrix_b_t[DIM][DIM]; // transposed copy for cache-friendly access
+alignas(64) long matrix_c[DIM][DIM];
+// Barrier to synchronize thread start of multiplication
+pthread_barrier_t start_barrier;
+
+// Initialize matrices with sample values
+void init() {
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            matrix_a[i][j] = i + j;
+            matrix_b[i][j] = i - j;
+            matrix_c[i][j] = 0;
+        }
+    }
+    // build transposed copy of matrix_b to improve locality in multiplication
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            matrix_b_t[j][i] = matrix_b[i][j];
+        }
+    }
+}
+
+// Perform matrix multiplication
+void multiply() {
+    // Use transposed B for better cache behavior: access A row and B_t row contiguously
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            long sum = 0;
+            long* arow = matrix_a[i];
+            long* browt = matrix_b_t[j];
+            for (int k = 0; k &lt; DIM; ++k) {
+                sum += arow[k] * browt[k];
+            }
+            matrix_c[i][j] = sum;
+        }
+    }
+}
+
+// pthread wrapper for running multiply() in a separate thread
+void* multiply_thread_fn(void* /*arg*/) {
+    multiply();
+    return nullptr;
+}
+
+// Arguments for per-thread multiply range
+struct ThreadArgs {
+    int row_start;
+    int row_end; // exclusive
+};
+
+// Worker: multiply rows [row_start, row_end)
+void* multiply_range(void* arg) {
+    ThreadArgs* a = static_cast<ThreadArgs*>(arg);
+    // wait until main signals all threads to start together
+    pthread_barrier_wait(&start_barrier);
+    // per-thread work: use transposed B to minimize cache misses and memory contention
+    for (int i = a-&gt;row_start; i &lt; a-&gt;row_end; ++i) {
+        long* arow = matrix_a[i];
+        for (int j = 0; j &lt; DIM; ++j) {
+            long sum = 0;
+            long* browt = matrix_b_t[j];
+            // iterate k over contiguous memory for both arrays
+            for (int k = 0; k &lt; DIM; ++k) {
+                sum += arow[k] * browt[k];
+            }
+            matrix_c[i][j] = sum;
+        }
+    }
+    return nullptr;
+}
+
+// Write result to a file
+void print() {
+    std::ofstream fout("serial.txt");
+    for (int i = 0; i &lt; DIM; ++i) {
+        for (int j = 0; j &lt; DIM; ++j) {
+            fout &lt;&lt; matrix_c[i][j] &lt;&lt; '\n';
+        }
+    }
+    fout.close();
+}
+
+int main(int argc, char** argv) {
+    using clock = std::chrono::high_resolution_clock;
+
+    auto t0 = clock::now();
+    init();
+    auto t1 = clock::now();
+
+    // Determine number of worker threads (optional argv[1])
+    int nthreads = 4;
+    if (argc &gt; 1) {
+        int parsed = std::atoi(argv[1]);
+        if (parsed &gt; 0) nthreads = parsed;
+    }
+    if (nthreads &gt; DIM) nthreads = DIM;
+
+    // initialize barrier: workers + main
+    if (pthread_barrier_init(&start_barrier, nullptr, nthreads + 1) != 0) {
+        std::cerr &lt;&lt; "Failed to init barrier\n";
+        return 1;
+    }
+
+    pthread_t* threads = new pthread_t[nthreads];
+    ThreadArgs* targs = new ThreadArgs[nthreads];
+
+    int base = DIM / nthreads;
+    int rem = DIM % nthreads;
+    int start = 0;
+    for (int t = 0; t &lt; nthreads; ++t) {
+        int rows = base + (t &lt; rem ? 1 : 0);
+        int end = start + rows;
+        targs[t].row_start = start;
+        targs[t].row_end = end;
+        if (pthread_create(&threads[t], nullptr, &multiply_range, &targs[t]) != 0) {
+            std::cerr &lt;&lt; "Failed to create multiply thread " &lt;&lt; t &lt;&lt; "\n";
+            delete[] threads;
+            delete[] targs;
+            return 1;
+        }
+        start = end;
+    }
+
+    // all threads created; release them to start multiplication at the same time
+    // main participates in the barrier so the timing starts when barrier returns
+    if (pthread_barrier_wait(&start_barrier) != 0 &amp;&amp; errno != 0) {
+        // pthread_barrier_wait returns PTHREAD_BARRIER_SERIAL_THREAD for one thread
+    }
+    auto t_start_mult = clock::now();
+
+    for (int t = 0; t &lt; nthreads; ++t) {
+        if (pthread_join(threads[t], nullptr) != 0) {
+            std::cerr &lt;&lt; "Failed to join multiply thread " &lt;&lt; t &lt;&lt; "\n";
+            delete[] threads;
+            delete[] targs;
+            return 1;
+        }
+    }
+    auto t2 = clock::now();
+    // destroy barrier now that threads have finished
+    pthread_barrier_destroy(&start_barrier);
+    delete[] threads;
+    delete[] targs;
+    print();
+    auto t3 = clock::now();
+
+    std::chrono::duration&lt;double&gt; init_sec = t1 - t0;
+    std::chrono::duration&lt;double&gt; mult_sec = t2 - t_start_mult;
+    std::chrono::duration&lt;double&gt; print_sec = t3 - t2;
+    std::chrono::duration&lt;double&gt; total_sec = t3 - t0;
+
+    // Count approximate basic operations
+    // init: two arithmetic ops per element (i+j, i-j) plus one store for matrix_c
+    std::uint64_t init_ops = static_cast&lt;std::uint64_t&gt;(DIM) * DIM * 3; // (i+j),(i-j),c=0
+
+    // multiply: one multiply and one add per k for each (i,j)
+    std::uint64_t mul_ops = static_cast&lt;std::uint64_t&gt;(DIM) * DIM * DIM; // multiplications
+    std::uint64_t add_ops = mul_ops; // additions
+    std::uint64_t mult_total_ops = mul_ops + add_ops;
+
+    // print: one write per element
+    std::uint64_t print_ops = static_cast&lt;std::uint64_t&gt;(DIM) * DIM;
+
+    double sec_per_init_op = init_sec.count() / double(init_ops);
+    double sec_per_mult_op = mult_sec.count() / double(mult_total_ops);
+    double sec_per_print_op = print_sec.count() / double(print_ops);
+
+    // Print profiling summary
+    std::cout &lt;&lt; "Profiling summary:\n";
+    std::cout &lt;&lt; "  init:  " &lt;&lt; init_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "  mult:  " &lt;&lt; mult_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "  print: " &lt;&lt; print_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "  total: " &lt;&lt; total_sec.count() &lt;&lt; " s\n";
+    std::cout &lt;&lt; "Estimated basic ops:\n";
+    std::cout &lt;&lt; "  init ops:  " &lt;&lt; init_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "  mult muls: " &lt;&lt; mul_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "  mult adds: " &lt;&lt; add_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "  print ops: " &lt;&lt; print_ops &lt;&lt; "\n";
+    std::cout &lt;&lt; "Time per init-op:  " &lt;&lt; sec_per_init_op &lt;&lt; " s\n";
+    std::cout &lt;&lt; "Time per mult-op:  " &lt;&lt; sec_per_mult_op &lt;&lt; " s\n";
+    std::cout &lt;&lt; "Time per print-op: " &lt;&lt; sec_per_print_op &lt;&lt; " s\n";
+
+    // Decide which part is the bottleneck by total time
+    if (mult_sec.count() &gt;= init_sec.count() &amp;&amp; mult_sec.count() &gt;= print_sec.count()) {
+        std::cout &lt;&lt; "Bottleneck: multiplication\n";
+    } else if (init_sec.count() &gt;= mult_sec.count() &amp;&amp; init_sec.count() &gt;= print_sec.count()) {
+        std::cout &lt;&lt; "Bottleneck: initialization\n";
+    } else {
+        std::cout &lt;&lt; "Bottleneck: printing/output\n";
+    }
+
+    // Also write a small results file for HTML embedding
+    std::ofstream rf("profile_results.txt");
+    rf &lt;&lt; "init " &lt;&lt; init_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "mult " &lt;&lt; mult_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "print " &lt;&lt; print_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "total " &lt;&lt; total_sec.count() &lt;&lt; "\n";
+    rf &lt;&lt; "init_ops " &lt;&lt; init_ops &lt;&lt; "\n";
+    rf &lt;&lt; "mul_ops " &lt;&lt; mul_ops &lt;&lt; "\n";
+    rf &lt;&lt; "add_ops " &lt;&lt; add_ops &lt;&lt; "\n";
+    rf &lt;&lt; "print_ops " &lt;&lt; print_ops &lt;&lt; "\n";
+    rf &lt;&lt; "sec_per_init_op " &lt;&lt; sec_per_init_op &lt;&lt; "\n";
+    rf &lt;&lt; "sec_per_mult_op " &lt;&lt; sec_per_mult_op &lt;&lt; "\n";
+    rf &lt;&lt; "sec_per_print_op " &lt;&lt; sec_per_print_op &lt;&lt; "\n";
+    rf.close();
+
+    return 0;
+}
+    </code></pre>
+
+        <h3>Step 5 Results</h3>
+        <p>We ran the transposed-B optimized program and collected the following synchronized timings :</p>
+
+        <img src="matrix_time_step6.svg" alt="Step 5 execution time results" style="max-width:100%;border:1px solid #ccc;background:#fff;">
+
+        <h3>Explanation</h3>
+        <p>The main change in Step 5 is creating an aligned, transposed copy of <code>matrix_b</code> (named <code>matrix_b_t</code>) and using rows of <code>matrix_a</code> and rows of <code>matrix_b_t</code> in the inner loop. This makes the two input arrays be accessed contiguously in the hot loop, which reduces cache misses and memory-bandwidth contention between threads. Combined with per-thread row partitioning and the barrier-synchronized start, the optimization significantly reduced the measured <strong>mult</strong> time. For reproducible benchmarking, run multiple trials and compare medians; verify correctness by comparing outputs or a checksum between variants.</p>
+
+        <h2>Comparison Summary</h2>
+        <p>This table summarizes total execution time across matrix sizes and thread counts. Key observations:</p>
+        <ul>
+            <li>Small matrices (DIM=200) show limited scaling due to thread startup and I/O overhead — parallelism helps less.</li>
+            <li>Medium matrices (DIM=500) gain noticeable speedup with 4 threads; memory bandwidth begins to limit efficiency.</li>
+            <li>Large matrices (DIM=1000) are compute-dominated and scale best — 4–8 threads give the largest reductions in runtime.</li>
+            <li>Beyond 4 threads some runs show diminishing returns because of cache/memory contention and thread-management overhead.</li>
+        </ul>
+        <p>See the comparison table below . The <strong>Notes</strong> column explains why each row behaves as observed.</p>
+        <img src="comparision_table_fixed.svg" alt="Comparison table" style="max-width:100%;border:1px solid #ccc;background:#fff;margin:12px 0;">
+
+        <div class="footer">
+                &copy; 2026 Ibrahim_ibrahim. All rights reserved.
+            </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,19 @@
+<svg width="600" height="180" xmlns="http://www.w3.org/2000/svg">
+  <rect width="600" height="180" fill="#f4f4f4"/>
+  <text x="20" y="30" font-family="monospace" font-size="18" fill="#003366">Execution Time Results</text>
+  <text x="20" y="60" font-family="monospace" font-size="15" fill="#222">
+User time (seconds): 2.17
+  </text>
+  <text x="20" y="80" font-family="monospace" font-size="15" fill="#222">
+System time (seconds): 0.02
+  </text>
+  <text x="20" y="100" font-family="monospace" font-size="15" fill="#222">
+Elapsed (wall clock) time: 0:02.20
+  </text>
+  <text x="20" y="120" font-family="monospace" font-size="15" fill="#222">
+CPU percent: 99%
+  </text>
+  <text x="20" y="140" font-family="monospace" font-size="15" fill="#222">
+Max resident set size: 27008 KB
+  </text>
+</svg>
